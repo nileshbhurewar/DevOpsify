@@ -1,0 +1,149 @@
+---
+# =====================================================================
+# 🚀 AUTOMATED INFRASTRUCTURE SETUP — MASTER NODE PLAYBOOK
+# =====================================================================
+# This playbook installs and configures:
+# - Base OS setup & updates
+# - AWS CLI, Docker, Kubectl, Helm
+# - EKS cluster configuration
+# - Jenkins, Datadog, ArgoCD
+# =====================================================================
+
+# -----------------------------------------------------------
+# 1️⃣ Wait for System Readiness and Update Base Packages
+# -----------------------------------------------------------
+- name: Prepare and update master node
+  hosts: master
+  become: yes
+  gather_facts: false
+
+  tasks:
+    - name: Wait for SSH connection (max 5 min)
+      wait_for_connection:
+        timeout: 300
+        connect_timeout: 60
+
+    - name: Gather system facts
+      setup:
+
+    - name: Update and upgrade system packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+        cache_valid_time: 3600
+
+# -----------------------------------------------------------
+# 2️⃣ Install Core Infrastructure Tools
+# -----------------------------------------------------------
+- name: Install core infrastructure tools
+  hosts: master
+  become: yes
+  roles:
+    - awscli
+    - docker
+    - kubectl
+    - helm
+
+# -----------------------------------------------------------
+# 3️⃣ Configure EKS Cluster Access
+# -----------------------------------------------------------
+- name: Configure EKS cluster access
+  hosts: master
+  become: yes
+
+  tasks:
+    - name: Wait for EKS cluster to be active
+      pause:
+        seconds: 30
+      changed_when: false
+
+    - name: Update kubeconfig for EKS cluster
+      shell: aws eks update-kubeconfig --region ap-south-1 --name custom-eks
+      register: kubeconfig_update
+      failed_when: kubeconfig_update.rc != 0
+      retries: 3
+      delay: 10
+
+    - name: Verify Kubernetes API accessibility
+      command: kubectl cluster-info
+      register: cluster_info
+      until: cluster_info.rc == 0
+      retries: 10
+      delay: 15
+      changed_when: false
+
+    - name: Display cluster connection status
+      debug:
+        msg: "✅ Successfully connected to EKS cluster"
+
+# -----------------------------------------------------------
+# 4️⃣ Install Monitoring and CI/CD Tools
+# -----------------------------------------------------------
+- name: Install monitoring and CI/CD tools
+  hosts: master
+  become: yes
+  roles:
+    - datadog
+    - jenkins
+
+# -----------------------------------------------------------
+# 5️⃣ Deploy ArgoCD on EKS
+# -----------------------------------------------------------
+- name: Prepare EKS before ArgoCD deployment
+  hosts: master
+  become: yes
+
+  tasks:
+    - name: Wait until all nodes are Ready
+      shell: kubectl get nodes --no-headers
+      register: nodes_check
+      until: nodes_check.rc == 0 and ('Ready' in nodes_check.stdout)
+      retries: 12
+      delay: 10
+      changed_when: false
+
+    - name: Display node status
+      debug:
+        var: nodes_check.stdout
+
+- name: Install and expose ArgoCD
+  hosts: master
+  become: yes
+  roles:
+    - argocd
+
+# -----------------------------------------------------------
+# 6️⃣ Final Verification and Summary
+# -----------------------------------------------------------
+- name: Final verification and status
+  hosts: master
+  become: yes
+
+  tasks:
+    - name: Verify installed tools
+      shell: |
+        echo "Docker: $(docker --version 2>/dev/null || echo 'Not installed')"
+        echo "Kubectl: $(kubectl version --client --short 2>/dev/null || echo 'Not installed')"
+        echo "Helm: $(helm version --short 2>/dev/null || echo 'Not installed')"
+        echo "AWS CLI: $(aws --version 2>/dev/null || echo 'Not installed')"
+      register: versions_check
+      changed_when: false
+
+    - name: Display installation summary
+      debug:
+        msg: |
+          🎯 Installation completed successfully!
+
+          ✅ Installed Tools:
+          {{ versions_check.stdout | indent(10) }}
+
+          🌐 Access Information:
+          - Jenkins: http://{{ ansible_host }}:8080
+          - ArgoCD: kubectl get svc -n argocd
+          - EKS Cluster: custom-eks
+
+          🧭 Next Steps:
+          1. Jenkins admin password:
+             sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+          2. Access ArgoCD:
+             kubectl port-forward svc/argocd-server -n argocd 8080:80
