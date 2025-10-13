@@ -1,0 +1,67 @@
+# roles/datadog/tasks/main.yml
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install dependencies
+  apt:
+    name:
+      - curl
+      - gnupg
+      - apt-transport-https
+    state: present
+
+- name: Add Datadog APT key
+  apt_key:
+    url: https://keys.datadoghq.com/DATADOG_APT_KEY_CURRENT.public
+    state: present
+
+- name: Add Datadog repository
+  apt_repository:
+    repo: "deb https://apt.datadoghq.com/ stable main"
+    state: present
+    filename: datadog
+
+- name: Install Datadog Agent
+  apt:
+    name: datadog-agent
+    state: latest
+    update_cache: yes
+
+- name: Configure Datadog API key
+  lineinfile:
+    path: /etc/datadog-agent/datadog.yaml
+    line: "api_key: {{ datadog_api_key }}"
+    regexp: '^api_key:'
+    state: present
+  notify: restart datadog-agent
+
+- name: Ensure Datadog Agent is running
+  systemd:
+    name: datadog-agent
+    state: started
+    enabled: yes
+
+- name: Wait for Datadog Agent to initialize
+  wait_for:
+    timeout: 30
+
+- name: Verify Datadog Agent status
+  command: datadog-agent status
+  register: agent_status
+  changed_when: false
+  ignore_errors: yes
+
+- name: Display Agent status summary
+  debug:
+    var: agent_status.stdout_lines[-10:]
+
+# -----------------------------
+# Handlers
+# -----------------------------
+- name: restart datadog-agent
+  systemd:
+    name: datadog-agent
+    state: restarted

@@ -1,0 +1,38 @@
+# roles/awscli/tasks/main.yml
+
+- name: Install dependencies
+  apt:
+    name:
+      - unzip
+      - curl
+    state: present
+    update_cache: yes
+
+- name: Download AWS CLI v2 installer
+  get_url:
+    url: "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+    dest: "/tmp/awscliv2.zip"
+
+- name: Unzip AWS CLI
+  unarchive:
+    src: "/tmp/awscliv2.zip"
+    dest: "/tmp/"
+    remote_src: yes
+
+- name: Install AWS CLI
+  command: "/tmp/aws/install"
+
+- name: Update PATH for current session
+  lineinfile:
+    path: /etc/environment
+    line: 'PATH="/usr/local/bin:$PATH"'
+    regexp: '^PATH='
+    state: present
+
+- name: Verify AWS CLI installation
+  command: /usr/local/bin/aws --version
+  register: aws_version
+
+- name: Display AWS CLI version
+  debug:
+    var: aws_version.stdout
