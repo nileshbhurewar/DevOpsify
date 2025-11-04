@@ -115,8 +115,8 @@ DevOpsify
 
 ---
 
-## 👨‍💻 Author
+## Author
 
-**Nilesh Bhurewar**  
-DevOps Engineer  
+**Nilesh Bhurewar**   
 [GitHub Profile](https://github.com/nileshbhurewar) | [LinkedIn](https://www.linkedin.com/in/nilesh-rajesh-bhurewar/)
+
